@@ -1387,12 +1387,14 @@ namespace hpx {
         threads::thread_init_data data(util::bind(&runtime::run_helper, this,
                                            func, std::ref(result_), true),
             "run_helper", threads::thread_priority::normal,
-            threads::thread_schedule_hint(0), threads::thread_stacksize::large);
+            // prevent main from being executed directly
+            threads::thread_schedule_hint(
+                threads::thread_schedule_hint_mode::thread, 0, false),
+            threads::thread_stacksize::large);
 
         this->runtime::starting();
         threads::thread_id_ref_type id = threads::invalid_thread_id;
         thread_manager_->register_thread(data, id);
-
         // }}}
 
         // block if required

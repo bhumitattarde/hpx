@@ -47,9 +47,8 @@ namespace hpx { namespace parallel { namespace execution { namespace detail {
     {
         HPX_ASSERT(pool);
 
-        typedef std::vector<hpx::future<
-            typename detail::bulk_function_result<F, S, Ts...>::type>>
-            result_type;
+        using result_type = std::vector<
+            hpx::future<typename detail::bulk_function_result_t<F, S, Ts...>>>;
 
         result_type results;
         std::size_t const size = hpx::util::size(shape);
@@ -63,7 +62,8 @@ namespace hpx { namespace parallel { namespace execution { namespace detail {
         auto it = std::begin(shape);
         for (std::size_t t = 0; t < num_threads; ++t)
         {
-            std::size_t const part_end = ((t + 1) * size) / num_threads;
+            std::size_t const part_end =
+                (std::min)(((t + 1) * size) / num_threads, size);
             std::size_t const part_size = part_end - part_begin;
 
             auto async_policy = policy;
@@ -145,17 +145,16 @@ namespace hpx { namespace parallel { namespace execution { namespace detail {
             hpx::make_tuple(std::forward<Ts>(ts)...));
 
         // void or std::vector<func_result_type>
-        using vector_result_type = typename detail::bulk_then_execute_result<F,
-            S, Future, Ts...>::type;
+        using vector_result_type = detail::bulk_then_execute_result_t<F,
+            S, Future, Ts...>;
 
         // future<vector_result_type>
         using result_future_type = hpx::future<vector_result_type>;
 
         using shared_state_type =
-            typename hpx::traits::detail::shared_state_ptr<
-                vector_result_type>::type;
+            hpx::traits::detail::shared_state_ptr_t<vector_result_type>;
 
-        using future_type = typename std::decay<Future>::type;
+        using future_type = std::decay_t<Future>;
 
         // vector<future<func_result_type>> -> vector<func_result_type>
         shared_state_type p = hpx::lcos::detail::make_continuation_exec_policy<

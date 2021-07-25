@@ -177,7 +177,7 @@ namespace hpx { namespace threads { namespace policies {
             HPX_ASSERT(num_workers_ != 0);
         }
 
-        virtual ~shared_priority_queue_scheduler() {}
+        ~shared_priority_queue_scheduler() override = default;
 
         static std::string get_scheduler_name()
         {
@@ -188,19 +188,19 @@ namespace hpx { namespace threads { namespace policies {
         void set_scheduler_mode(scheduler_mode mode) override
         {
             // clang-format off
-                    scheduler_base::set_scheduler_mode(mode);
-                    round_robin_ = mode & policies::assign_work_round_robin;
-                    steal_hp_first_ = mode & policies::steal_high_priority_first;
-                    core_stealing_ = mode & policies::enable_stealing;
-                    numa_stealing_ = mode & policies::enable_stealing_numa;
-                    spq_deb.debug(debug::str<>("scheduler_mode")
-                        , round_robin_ ? "round_robin" : "thread parent"
-                        , ','
-                        , steal_hp_first_ ? "steal_hp_first" : "steal after local"
-                        , ','
-                        , core_stealing_ ? "stealing" : "no stealing"
-                        , ','
-                        , numa_stealing_ ? "numa stealing" : "no numa stealing");
+            scheduler_base::set_scheduler_mode(mode);
+            round_robin_ = mode & policies::assign_work_round_robin;
+            steal_hp_first_ = mode & policies::steal_high_priority_first;
+            core_stealing_ = mode & policies::enable_stealing;
+            numa_stealing_ = mode & policies::enable_stealing_numa;
+            spq_deb.debug(debug::str<>("scheduler_mode")
+                , round_robin_ ? "round_robin" : "thread parent"
+                , ','
+                , steal_hp_first_ ? "steal_hp_first" : "steal after local"
+                , ','
+                , core_stealing_ ? "stealing" : "no stealing"
+                , ','
+                , numa_stealing_ ? "numa stealing" : "no numa stealing");
             // clang-format on
         }
 
@@ -301,6 +301,10 @@ namespace hpx { namespace threads { namespace policies {
             // safety check that task was created by this thread/scheduler
             HPX_ASSERT(data.scheduler_base == this);
 
+            // this scheduler assumes thread bindings for the scheduled
+            // threads in certain ways preventing direct execution
+            HPX_ASSERT(!data.schedulehint.runs_as_child);
+
             std::size_t const local_num = local_thread_number();
 
             std::size_t thread_num = local_num;
@@ -321,15 +325,15 @@ namespace hpx { namespace threads { namespace policies {
                 if (local_num == std::size_t(-1))
                 {
                     // clang-format off
-                            using namespace hpx::threads::detail;
-                            spq_deb.debug(debug::str<>("create_thread")
-                                , "x-pool", "num_workers_", num_workers_
-                                , "thread_number"
-                                , "global", get_thread_nums_tss().global_thread_num
-                                , "local", get_thread_nums_tss().local_thread_num
-                                , "pool", get_thread_nums_tss().thread_pool_num
-                                , "parent offset", parent_pool_->get_thread_offset()
-                                , parent_pool_->get_pool_name());
+                    using namespace hpx::threads::detail;
+                    spq_deb.debug(debug::str<>("create_thread")
+                        , "x-pool", "num_workers_", num_workers_
+                        , "thread_number"
+                        , "global", get_thread_nums_tss().global_thread_num
+                        , "local", get_thread_nums_tss().local_thread_num
+                        , "pool", get_thread_nums_tss().thread_pool_num
+                        , "parent offset", parent_pool_->get_thread_offset()
+                        , parent_pool_->get_pool_name());
                     // clang-format on
                     // This is a task being injected from a thread on another
                     // pool - we can schedule on any thread available
@@ -412,39 +416,44 @@ namespace hpx { namespace threads { namespace policies {
                     "Invalid schedule hint mode: {}",
                     static_cast<std::size_t>(data.schedulehint.mode));
             }
+
             // we do not allow threads created on other queues to 'run now'
             // as this causes cross-thread allocations and map accesses
-            if (local_num != thread_num)
+            // (except if state is not pending, in which case we have to
+            // schedule the thread right away)
+            if (local_num != thread_num &&
+                data.initial_state == thread_schedule_state::pending)
             {
                 data.run_now = false;
+
                 // clang-format off
-                        spq_deb.debug(debug::str<>("create_thread")
-                            , "pool", parent_pool_->get_pool_name()
-                            , "hint", msg
-                            , "dest"
-                            , "D", debug::dec<2>(domain_num)
-                            , "Q", debug::dec<3>(q_index)
-                            , "this"
-                            , "D", debug::dec<2>(d_lookup_[thread_num])
-                            , "Q", debug::dec<3>(thread_num)
-                            , "run_now OVERRIDE ", data.run_now
-                            , debug::threadinfo<thread_init_data>(data));
+                spq_deb.debug(debug::str<>("create_thread")
+                    , "pool", parent_pool_->get_pool_name()
+                    , "hint", msg
+                    , "dest"
+                    , "D", debug::dec<2>(domain_num)
+                    , "Q", debug::dec<3>(q_index)
+                    , "this"
+                    , "D", debug::dec<2>(d_lookup_[thread_num])
+                    , "Q", debug::dec<3>(thread_num)
+                    , "run_now OVERRIDE ", data.run_now
+                    , debug::threadinfo<thread_init_data>(data));
                 // clang-format on
             }
             else
             {
                 // clang-format off
-                        spq_deb.debug(debug::str<>("create_thread")
-                            , "pool", parent_pool_->get_pool_name()
-                            , "hint", msg
-                            , "dest"
-                            , "D", debug::dec<2>(domain_num)
-                            , "Q", debug::dec<3>(q_index)
-                            , "this"
-                            , "D", debug::dec<2>(d_lookup_[thread_num])
-                            , "Q", debug::dec<3>(thread_num)
-                            , "run_now", data.run_now
-                            , debug::threadinfo<thread_init_data>(data));
+                spq_deb.debug(debug::str<>("create_thread")
+                    , "pool", parent_pool_->get_pool_name()
+                    , "hint", msg
+                    , "dest"
+                    , "D", debug::dec<2>(domain_num)
+                    , "Q", debug::dec<3>(q_index)
+                    , "this"
+                    , "D", debug::dec<2>(d_lookup_[thread_num])
+                    , "Q", debug::dec<3>(thread_num)
+                    , "run_now", data.run_now
+                    , debug::threadinfo<thread_init_data>(data));
                 // clang-format on
             }
             numa_holder_[domain_num]
@@ -1347,6 +1356,13 @@ namespace hpx { namespace threads { namespace policies {
             return 0;
         }
 #endif
+
+        // this scheduler assumes thread bindings for the scheduled threads in
+        // certain ways preventing direct execution
+        bool supports_direct_execution() const override
+        {
+            return false;
+        }
 
     protected:
         typedef queue_holder_numa<thread_queue_type> numa_queues;

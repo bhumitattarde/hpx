@@ -160,11 +160,21 @@ namespace hpx { namespace detail {
 
             if (tid)
             {
-                // keep thread alive, if needed
-                auto&& result = p.get_future();
-                traits::detail::get_shared_state(result)->set_on_completed(
-                    [tid = std::move(tid)]() { (void) tid; });
-                return std::move(result);
+                bool runs_as_child = policy.hint().runs_as_child;
+                if (runs_as_child)
+                {
+                    runs_as_child =
+                        pool->get_scheduler()->supports_direct_execution();
+                }
+
+                if (!runs_as_child)
+                {
+                    // keep thread alive, if needed
+                    auto&& result = p.get_future();
+                    traits::detail::get_shared_state(result)->set_on_completed(
+                        [tid = std::move(tid)]() { (void) tid; });
+                    return std::move(result);
+                }
             }
             return p.get_future();
         }
@@ -211,11 +221,21 @@ namespace hpx { namespace detail {
                     threads::thread_schedule_state::pending, tid.noref(),
                     desc.get_description());
 
-                // keep thread alive, if needed
-                auto&& result = p.get_future();
-                traits::detail::get_shared_state(result)->set_on_completed(
-                    [tid = std::move(tid)]() { (void) tid; });
-                return std::move(result);
+                bool runs_as_child = policy.hint().runs_as_child;
+                if (runs_as_child)
+                {
+                    runs_as_child =
+                        pool->get_scheduler()->supports_direct_execution();
+                }
+
+                if (!runs_as_child)
+                {
+                    // keep thread alive, if needed
+                    auto&& result = p.get_future();
+                    traits::detail::get_shared_state(result)->set_on_completed(
+                        [tid = std::move(tid)]() { (void) tid; });
+                    return std::move(result);
+                }
             }
             return p.get_future();
         }
